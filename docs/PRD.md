@@ -1,4 +1,4 @@
-PRD: PocketVault
+﻿PRD: PocketVault
 Document details
 Field	Answer
 Product name	PocketVault
@@ -439,7 +439,7 @@ Purpose: See the money and Debt Guard at a glance. Who: Owner. From S3, tabs →
 Layout: 1. Header: "Dashboard" and period dropdown (This month, Last month, Last 3 months). 2. Banners (approval, bill due, At risk). 3. Cash card: "Cash on hand" big number, "Safe-to-spend", Risk badge. 4. Stat cards: Total income, Total expenses, Net result, each with % vs the previous period. 5. Bar chart "Income and expenses" by month (Last 3 months) or by week. 6. Expense breakdown by category (bars with percentages and labels). 7. "Upcoming bills" list (next 5, due date and amount). 8. "Insights" cards (BR15). 9. Break-even progress bar (if a plan exists). 10. Link "Review flags".
 Buttons: banner → S8 or S9; "Review flags" → S11; "See all bills" → S9.
 States: Normal: as above. Empty: "Not enough data yet. Add your first transaction or bill." with buttons "Add transaction" → S8 and "Add bill" → S9. Loading: grey cards and chart placeholder. Error, Offline: shared. Success: not needed because there is no action.
-Sample: Zodwa's Home Bakery, This month: Income R10,800.00; Expenses R4,250.00; Net R6,550.00; Cash on hand R10,950.00; Safe-to-spend R5,651.00; badge "Safe"; insight "Stock is 59% of your expenses."
+Sample: Zodwa's Home Bakery, This month: Income R10,800.00; Expenses R1,850.00; Net R8,950.00; Cash on hand R10,950.00; Safe-to-spend R5,651.00; badge "Safe"; insight "Stock is 68% of your expenses."
 
 S7 Planner
 

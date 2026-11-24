@@ -1,23 +1,30 @@
-﻿import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Welcome from "./pages/Welcome";
+import { ForgotPasswordPage, LogInPage, SignUpPage } from "./pages/AuthPages";
+import { AuthProvider, useAuth } from "./lib/auth";
 
-function ComingSoon({ title }: { title: string }) {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-2 px-4 text-center">
-      <h1 className="text-title text-vault">{title}</h1>
-      <p className="text-body text-moss">This screen is built in a later pull request.</p>
-    </main>
-  );
+function Protected({ title }: { title: string }) {
+  const { session, loading, membershipLoading, membership, signOut } = useAuth(); const location = useLocation();
+  if (loading || (session && membershipLoading)) return <main className="flex min-h-screen items-center justify-center text-moss" role="status">Loading…</main>;
+  if (!session) return <Navigate to="/log-in" replace state={{ from: location.pathname }} />;
+  if (membership === null && location.pathname !== "/setup") return <Navigate to="/setup" replace />;
+  if (membership?.role === "Staff" && location.pathname !== "/ledger") return <Navigate to="/ledger" replace />;
+  if (membership?.role === "Owner" && location.pathname === "/ledger") return <Navigate to="/dashboard" replace />;
+  return <main className="flex min-h-screen flex-col items-center justify-center gap-5 bg-cream px-4"><h1 className="text-title text-vault">{title}</h1><button onClick={()=>void signOut()} className="h-12 rounded-control bg-vault px-6 font-semibold text-white">Log out</button></main>;
 }
 
-export default function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<Welcome />} />
-      <Route path="/sign-up" element={<ComingSoon title="Create account" />} />
-      <Route path="/log-in" element={<ComingSoon title="Log in" />} />
-      <Route path="/privacy" element={<ComingSoon title="Privacy Notice" />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
+function AppRoutes() {
+  return <Routes>
+    <Route path="/" element={<Welcome />} />
+    <Route path="/sign-up" element={<SignUpPage />} />
+    <Route path="/log-in" element={<LogInPage />} />
+    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+    <Route path="/privacy" element={<main className="mx-auto max-w-xl p-6"><h1 className="text-title">Privacy Notice</h1><p className="mt-4">PocketVault stores your email and name to provide account access and identify entries. Your business members can see information as described in the PocketVault product privacy terms. You can request account deletion in Settings.</p></main>} />
+    <Route path="/setup" element={<Protected title="Business setup" />} />
+    <Route path="/dashboard" element={<Protected title="Dashboard" />} />
+    <Route path="/ledger" element={<Protected title="Ledger" />} />
+    <Route path="*" element={<Navigate to="/" replace />} />
+  </Routes>;
 }
+
+export default function App() { return <AuthProvider><AppRoutes /></AuthProvider>; }

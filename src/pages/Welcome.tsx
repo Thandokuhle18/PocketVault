@@ -31,6 +31,21 @@ export default function Welcome() {
         aria-hidden="true"
         className="pointer-events-none absolute -left-20 top-24 h-40 w-40 rounded-full border-[18px] border-sage"
       />
+      <svg
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-[clamp(24px,6.2vh,56px)] w-[min(264px,70vw)] -translate-x-1/2"
+        viewBox="0 0 264 168"
+        fill="none"
+      >
+        <path
+          d="M24 168a120 120 0 0 1 240 0h-56a64 64 0 0 0-128 0H24Z"
+          fill="#9DB59A"
+        />
+        <circle cx="64" cy="168" r="64" fill="#E6B73F" />
+        <circle cx="64" cy="146" r="10" fill="#FAF6EA" />
+        <circle cx="60" cy="48" r="16" fill="#9DB59A" />
+        <circle cx="220" cy="28" r="28" fill="#E6B73F" />
+      </svg>
       <div className="relative flex w-full max-w-sm flex-col items-center gap-4">
         <LogoMark />
         <h1 className="text-title text-vault">PocketVault</h1>

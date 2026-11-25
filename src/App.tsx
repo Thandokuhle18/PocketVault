@@ -6,6 +6,7 @@ import BusinessSetup from "./pages/BusinessSetup";
 import Ledger from "./pages/Ledger";
 import Planner from "./pages/Planner";
 import Bills from "./pages/Bills";
+import Dashboard from "./pages/Dashboard";
 
 function Protected({ title, children }: { title: string; children?: React.ReactNode }) {
   const { session, loading, membershipLoading, membership, signOut } = useAuth(); const location = useLocation();
@@ -26,7 +27,7 @@ function AppRoutes() {
     <Route path="/forgot-password" element={<ForgotPasswordPage />} />
     <Route path="/privacy" element={<main className="mx-auto max-w-xl p-6"><h1 className="text-title">Privacy Notice</h1><p className="mt-4">PocketVault stores your email and name to provide account access and identify entries. Your business members can see information as described in the PocketVault product privacy terms. You can request account deletion in Settings.</p></main>} />
     <Route path="/setup" element={<Protected title="Business setup"><BusinessSetup /></Protected>} />
-    <Route path="/dashboard" element={<Protected title="Dashboard" />} />
+    <Route path="/dashboard" element={<Protected title="Dashboard"><Dashboard /></Protected>} />
     <Route path="/planner" element={<Protected title="Planner"><Planner /></Protected>} />
     <Route path="/ledger" element={<Protected title="Ledger"><Ledger /></Protected>} />
     <Route path="/bills" element={<Protected title="Bills"><Bills /></Protected>} />

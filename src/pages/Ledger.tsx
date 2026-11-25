@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { formatZar } from "../lib/money";
+import { billsDue30, cashOnHand, debtGuardWarning, safeToSpend } from "../lib/insights";
 import {
   calculateLedgerTotals, categoriesForType, clearLedgerFilters, localDateString, parseAmount,
   periodStart, validateDeleteReason, validateTransaction,
@@ -60,10 +61,10 @@ function Banner({ children, tone = "gold" }: { children: React.ReactNode; tone?:
 }
 
 function TransactionModal({
-  initial, busy, online, serverError, onClose, onSave,
+  initial, busy, online, serverError, debtWarning, onClose, onClearDebtWarning, onSave,
 }: {
-  initial: TransactionDraft; busy: boolean; online: boolean; serverError: string; onClose: () => void;
-  onSave: (draft: TransactionDraft) => Promise<void>;
+  initial: TransactionDraft; busy: boolean; online: boolean; serverError: string; debtWarning: string; onClose: () => void; onClearDebtWarning: () => void;
+  onSave: (draft: TransactionDraft, allowWarning?: boolean) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -125,9 +126,10 @@ function TransactionModal({
           {errors.notes && <p className="mt-1 text-small text-danger">{errors.notes}</p>}
         </div>
         {serverError && <Banner tone="danger">{serverError}</Banner>}
+        {debtWarning && <div className="rounded-control bg-gold p-4 font-semibold text-ink" role="alert"><p>{debtWarning}</p><div className="mt-3 grid gap-2"><button type="button" disabled={busy || !online} onClick={() => void onSave(draft, true)} className="h-12 rounded-control bg-vault font-semibold text-white disabled:opacity-60">Save anyway</button><button type="button" disabled={busy} onClick={onClearDebtWarning} className="h-12 rounded-control border-2 border-vault bg-white font-semibold text-vault">Cancel</button></div></div>}
         <div className="mt-auto grid gap-2 pt-1">
-          <button disabled={busy || !online} className="h-12 rounded-control bg-vault px-4 font-semibold text-white disabled:opacity-60">{busy ? "Saving…" : "Save"}</button>
-          <button type="button" disabled={busy} onClick={onClose} className="h-12 rounded-control border-2 border-vault bg-white px-4 font-semibold text-vault">Cancel</button>
+          {!debtWarning && <><button disabled={busy || !online} className="h-12 rounded-control bg-vault px-4 font-semibold text-white disabled:opacity-60">{busy ? "Saving…" : "Save"}</button>
+          <button type="button" disabled={busy} onClick={onClose} className="h-12 rounded-control border-2 border-vault bg-white px-4 font-semibold text-vault">Cancel</button></>}
         </div>
       </form>
     </section>
@@ -190,6 +192,7 @@ export default function Ledger() {
   const [deleting, setDeleting] = useState<LedgerTransaction | null>(null);
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState("");
+  const [debtWarning, setDebtWarning] = useState("");
 
   useEffect(() => {
     const updateOnline = () => setOnline(navigator.onLine);
@@ -254,8 +257,28 @@ export default function Ledger() {
 
   const categoryOptions = useMemo(() => filters.type === "Income" ? categoriesForType("Income") : filters.type === "Expense" ? categoriesForType("Expense") : [...categoriesForType("Income"), ...categoriesForType("Expense")], [filters.type]);
 
-  const saveTransaction = async (draft: TransactionDraft) => {
+  const saveTransaction = async (draft: TransactionDraft, allowWarning = false) => {
     if (!businessId || !session?.user) return;
+    setDebtWarning("");
+    if (!allowWarning && isOwner && draft.type === "Expense") {
+      const old = draft.id ? rows.find((row) => row.id === draft.id) : undefined;
+      const amount = parseAmount(draft.amount);
+      const wasExpense = old?.type === "Expense";
+      const added = wasExpense ? amount - Number(old.amount) : amount;
+      if (added > 0) {
+        const today = localDateString();
+        const [businessResult, transactionsResult, billsResult] = await Promise.all([
+          supabase.from("businesses").select("opening_balance").eq("id", businessId).single(),
+          supabase.from("transactions").select("amount,type,status,transaction_date,deleted_at").eq("business_id", businessId).is("deleted_at", null).lte("transaction_date", today),
+          supabase.from("bills").select("amount,due_date,status").eq("business_id", businessId).eq("status", "Unpaid"),
+        ]);
+        if (businessResult.error || transactionsResult.error || billsResult.error) { setModalError("Something went wrong. Try again."); return; }
+        const cash = cashOnHand(Number(businessResult.data.opening_balance), transactionsResult.data ?? [], today);
+        const due = billsDue30(billsResult.data ?? [], today);
+        const warning = debtGuardWarning(safeToSpend(cash, due), added);
+        if (warning) { setDebtWarning(warning); return; }
+      }
+    }
     setSaving(true); setModalError("");
     const fields = {
       description: draft.description.trim(), amount: parseAmount(draft.amount),
@@ -352,7 +375,7 @@ export default function Ledger() {
       {(isOwner ? [["Dashboard", "/dashboard"], ["Ledger", "/ledger"], ["Bills", "/bills"]] : [["Ledger", "/ledger"], ["Bills", "/bills"], ["Settings", "/settings"]]).map(([label, href]) => <Link key={label} to={href} aria-current={href === "/ledger" ? "page" : undefined} className={`rounded-control py-2 text-center text-small ${href === "/ledger" ? "bg-cream font-semibold text-vault" : "text-moss"}`}>{label}</Link>)}
     </nav>
 
-    {editing && <TransactionModal initial={editing} busy={saving} online={online} serverError={modalError} onClose={() => { if (!saving) setEditing(null); }} onSave={saveTransaction} />}
+    {editing && <TransactionModal initial={editing} busy={saving} online={online} serverError={modalError} debtWarning={debtWarning} onClearDebtWarning={() => setDebtWarning("")} onClose={() => { if (!saving) { setEditing(null); setDebtWarning(""); } }} onSave={saveTransaction} />}
     {deleting && <DeleteModal transaction={deleting} busy={saving} online={online} serverError={modalError} onClose={() => { if (!saving) setDeleting(null); }} onDelete={deleteTransaction} />}
   </div>;
 }

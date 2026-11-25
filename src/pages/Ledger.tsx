@@ -371,8 +371,8 @@ export default function Ledger() {
       </>}
     </main>
 
-    <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-moss/15 bg-white p-2 md:hidden" aria-label="Bottom navigation">
-      {(isOwner ? [["Dashboard", "/dashboard"], ["Ledger", "/ledger"], ["Bills", "/bills"]] : [["Ledger", "/ledger"], ["Bills", "/bills"], ["Settings", "/settings"]]).map(([label, href]) => <Link key={label} to={href} aria-current={href === "/ledger" ? "page" : undefined} className={`rounded-control py-2 text-center text-small ${href === "/ledger" ? "bg-cream font-semibold text-vault" : "text-moss"}`}>{label}</Link>)}
+    <nav className={`fixed inset-x-0 bottom-0 z-20 grid ${isOwner ? "grid-cols-4" : "grid-cols-3"} border-t border-moss/15 bg-white p-2 md:hidden`} aria-label="Bottom navigation">
+      {(isOwner ? [["Dashboard", "/dashboard"], ["Ledger", "/ledger"], ["Bills", "/bills"], ["Settings", "/settings"]] : [["Ledger", "/ledger"], ["Bills", "/bills"], ["Settings", "/settings"]]).map(([label, href]) => <Link key={label} to={href} aria-current={href === "/ledger" ? "page" : undefined} className={`rounded-control py-2 text-center text-small ${href === "/ledger" ? "bg-cream font-semibold text-vault" : "text-moss"}`}>{label}</Link>)}
     </nav>
 
     {editing && <TransactionModal initial={editing} busy={saving} online={online} serverError={modalError} debtWarning={debtWarning} onClearDebtWarning={() => setDebtWarning("")} onClose={() => { if (!saving) { setEditing(null); setDebtWarning(""); } }} onSave={saveTransaction} />}

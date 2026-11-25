@@ -38,7 +38,7 @@ begin
   if new.business_id is distinct from old.business_id or new.created_by is distinct from old.created_by
      or new.created_at is distinct from old.created_at then raise exception 'Transaction identity fields cannot be changed'; end if;
   if new.deleted_at is distinct from old.deleted_at and new.deleted_at is not null then
-    if not public.is_owner_of(old.business_id) then raise exception 'You can\'t do that.'; end if;
+    if not public.is_owner_of(old.business_id) then raise exception 'You can''t do that.'; end if;
     if old.deleted_at is not null then raise exception 'Deleted transactions cannot be changed'; end if;
     if nullif(current_setting('app.transaction_delete_reason', true), '') is null
        or char_length(current_setting('app.transaction_delete_reason', true)) not between 3 and 200 then
@@ -55,7 +55,7 @@ begin
   end if;
   if new.deleted_at is distinct from old.deleted_at then raise exception 'Deleted transactions cannot be restored'; end if;
   if old.deleted_at is not null then raise exception 'Deleted transactions cannot be changed'; end if;
-  if not public.is_owner_of(old.business_id) then raise exception 'You can\'t do that.'; end if;
+  if not public.is_owner_of(old.business_id) then raise exception 'You can''t do that.'; end if;
   if old.status <> 'Pending' and new.status is distinct from old.status then raise exception 'Only Pending transactions can be approved or rejected'; end if;
   if old.status = 'Pending' and new.status = 'Rejected' then
     if new.rejection_reason is null or char_length(new.rejection_reason) not between 3 and 200 then raise exception 'A rejection reason of 3 to 200 characters is required'; end if;
@@ -79,7 +79,7 @@ create or replace function public.soft_delete_transaction()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare v_reason text := nullif(current_setting('app.transaction_delete_reason', true), '');
 begin
-  if not public.is_owner_of(old.business_id) then raise exception 'You can\'t do that.'; end if;
+  if not public.is_owner_of(old.business_id) then raise exception 'You can''t do that.'; end if;
   if v_reason is null or char_length(v_reason) not between 3 and 200 then
     raise exception 'A delete reason of 3 to 200 characters is required';
   end if;

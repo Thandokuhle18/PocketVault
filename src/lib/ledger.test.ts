@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formatZar } from "./money";
 import {
   calculateLedgerTotals, expectedApprovalStatus, matchesLedgerFilters, periodStart, sortTransactions,
-  validateDeleteReason, validateTransaction, type LedgerFilters, type LedgerTransaction,
+  transactionReviewUpdate, validateDeleteReason, validateRejectionReason, validateTransaction, type LedgerFilters, type LedgerTransaction,
 } from "./ledger";
 
 const baseInput = {
@@ -75,5 +75,33 @@ describe("delete reason (BR9, T-US9-3 and T-US9-4)", () => {
     expect(validateDeleteReason("ab")).toBe("Enter a reason of 3 to 200 characters.");
     expect(validateDeleteReason("   ")).toBe("Enter a reason of 3 to 200 characters.");
     expect(validateDeleteReason("x".repeat(201))).toBe("Enter a reason of 3 to 200 characters.");
+  });
+});
+
+describe("transaction approvals (US12)", () => {
+  it("approves a pending expense and clears its rejection reason (T-US12-1)", () => {
+    const pending = rows[2];
+    const approved = { ...pending, ...transactionReviewUpdate(true) };
+    expect(approved.status).toBe("Approved");
+    expect(approved.rejection_reason).toBeNull();
+    expect(calculateLedgerTotals([...rows.slice(0, 2), approved])).toEqual({ income: 4800, expenses: 3650 });
+  });
+
+  it("rejects with the trimmed reason and keeps rejected expenses out of totals (T-US12-2)", () => {
+    expect(validateRejectionReason("Receipt missing")).toBeNull();
+    const rejected = { ...rows[2], ...transactionReviewUpdate(false, "  Receipt missing  ") };
+    expect(rejected.status).toBe("Rejected");
+    expect(rejected.rejection_reason).toBe("Receipt missing");
+    expect(calculateLedgerTotals([...rows.slice(0, 2), rejected])).toEqual({ income: 4800, expenses: 1250 });
+  });
+
+  it("requires 3 to 200 non-whitespace characters (T-US12-3 and boundaries)", () => {
+    const error = "Enter a reason of 3 to 200 characters.";
+    expect(validateRejectionReason("")).toBe(error);
+    expect(validateRejectionReason("ab")).toBe(error);
+    expect(validateRejectionReason("  ")).toBe(error);
+    expect(validateRejectionReason(" abc ")).toBeNull();
+    expect(validateRejectionReason("x".repeat(200))).toBeNull();
+    expect(validateRejectionReason("x".repeat(201))).toBe(error);
   });
 });

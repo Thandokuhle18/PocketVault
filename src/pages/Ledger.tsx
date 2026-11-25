@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { formatZar } from "../lib/money";
 import { billsDue30, cashOnHand, debtGuardWarning, safeToSpend } from "../lib/insights";
 import {
   calculateLedgerTotals, categoriesForType, clearLedgerFilters, localDateString, parseAmount,
-  periodStart, validateDeleteReason, validateTransaction,
+  periodStart, transactionReviewUpdate, validateDeleteReason, validateRejectionReason, validateTransaction,
   type LedgerFilters, type LedgerTransaction, type TransactionInput, type TransactionPeriod,
 } from "../lib/ledger";
 
@@ -136,6 +136,52 @@ function TransactionModal({
   </div>;
 }
 
+function ReviewModal({
+  transaction, creator, busy, online, serverError, debtWarning, warningLoading, onClose, onReview,
+}: {
+  transaction: LedgerTransaction; creator: string; busy: boolean; online: boolean; serverError: string; debtWarning: string; warningLoading: boolean;
+  onClose: () => void; onReview: (approve: boolean, reason: string) => Promise<void>;
+}) {
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+  const [reasonError, setReasonError] = useState("");
+  const reject = (event: React.FormEvent) => {
+    event.preventDefault();
+    const validation = validateRejectionReason(reason);
+    setReasonError(validation ?? "");
+    if (!validation) void onReview(false, reason);
+  };
+  return <div className="fixed inset-0 z-50 bg-ink/40 md:flex md:items-center md:justify-center md:p-4" role="presentation">
+    <section className="absolute bottom-0 max-h-[92vh] w-full overflow-y-auto rounded-t-card bg-white p-5 shadow-soft md:static md:max-w-[480px] md:rounded-card md:p-6" role="dialog" aria-modal="true" aria-labelledby="review-title">
+      <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-moss/20 md:hidden" />
+      <h2 id="review-title" className="text-heading">Approve this transaction?</h2>
+      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 rounded-control bg-cream p-4 text-small">
+        <div className="col-span-2"><dt className="text-moss">Description</dt><dd className="font-semibold">{transaction.description}</dd></div>
+        <div><dt className="text-moss">Amount</dt><dd className="font-semibold">{formatZar(Number(transaction.amount))}</dd></div>
+        <div><dt className="text-moss">Date</dt><dd>{displayDate(transaction.transaction_date)}</dd></div>
+        <div><dt className="text-moss">Category</dt><dd>{transaction.category}</dd></div>
+        <div><dt className="text-moss">Payment</dt><dd>{transaction.payment_method}</dd></div>
+        <div className="col-span-2"><dt className="text-moss">Created by</dt><dd>{creator}</dd></div>
+      </dl>
+      {debtWarning && <p className="mt-4 rounded-control bg-gold p-4 text-small font-semibold text-ink" role="alert">{debtWarning}</p>}
+      {serverError && <p className="mt-3 text-small text-danger" role="alert">{serverError}</p>}
+      {rejecting ? <form onSubmit={reject} className="mt-4">
+        <label className={labelClass} htmlFor="rejection-reason">Why are you rejecting this?</label>
+        <textarea id="rejection-reason" className={`${controlClass} min-h-24 resize-y py-3`} value={reason} maxLength={200} placeholder="Why are you rejecting this?" onChange={(event) => { setReason(event.target.value); setReasonError(""); }} aria-invalid={!!reasonError} />
+        {reasonError && <p className="mt-1 text-small text-danger">{reasonError}</p>}
+        <div className="mt-4 grid gap-2">
+          <button disabled={busy || !online} className="h-12 rounded-control bg-danger font-semibold text-white disabled:opacity-60">{busy ? "Saving…" : "Reject"}</button>
+          <button type="button" disabled={busy} onClick={() => { setRejecting(false); setReasonError(""); }} className="h-12 rounded-control border-2 border-vault font-semibold text-vault">Cancel</button>
+        </div>
+      </form> : <div className="mt-5 grid gap-2">
+        <button disabled={busy || warningLoading || !online} onClick={() => void onReview(true, "")} className="h-12 rounded-control bg-vault font-semibold text-white disabled:opacity-60">{busy ? "Saving…" : warningLoading ? "Checking bills…" : "Approve"}</button>
+        <button disabled={busy || !online} onClick={() => setRejecting(true)} className="h-12 rounded-control bg-danger font-semibold text-white disabled:opacity-60">Reject</button>
+        <button type="button" disabled={busy} onClick={onClose} className="h-12 rounded-control border-2 border-vault font-semibold text-vault">Cancel</button>
+      </div>}
+    </section>
+  </div>;
+}
+
 function DeleteModal({
   transaction, busy, online, serverError, onClose, onDelete,
 }: {
@@ -175,7 +221,8 @@ export default function Ledger() {
   const businessId = membership?.businessId;
   const role = membership?.role ?? "Staff";
   const isOwner = role === "Owner";
-  const [filters, setFilters] = useState<LedgerFilters>(initialFilters);
+  const [searchParams] = useSearchParams();
+  const [filters, setFilters] = useState<LedgerFilters>(() => ({ ...initialFilters, status: searchParams.get("status") === "Pending" ? "Pending" : "All" }));
   const [rows, setRows] = useState<LedgerTransaction[]>([]);
   const [creatorNames, setCreatorNames] = useState<ProfileMap>({});
   const [totals, setTotals] = useState({ income: 0, expenses: 0 });
@@ -190,6 +237,9 @@ export default function Ledger() {
   const [toast, setToast] = useState("");
   const [editing, setEditing] = useState<TransactionDraft | null>(null);
   const [deleting, setDeleting] = useState<LedgerTransaction | null>(null);
+  const [reviewing, setReviewing] = useState<LedgerTransaction | null>(null);
+  const [reviewDebtWarning, setReviewDebtWarning] = useState("");
+  const [reviewWarningLoading, setReviewWarningLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState("");
   const [debtWarning, setDebtWarning] = useState("");
@@ -310,6 +360,56 @@ export default function Ledger() {
     } finally { setSaving(false); }
   };
 
+  const openReview = async (transaction: LedgerTransaction) => {
+    if (!isOwner || transaction.status !== "Pending" || !businessId) return;
+    setModalError("");
+    setReviewDebtWarning("");
+    setReviewing(transaction);
+    if (transaction.type !== "Expense") { setReviewWarningLoading(false); return; }
+    setReviewWarningLoading(true);
+    const today = localDateString();
+    const [businessResult, transactionsResult, billsResult] = await Promise.all([
+      supabase.from("businesses").select("opening_balance").eq("id", businessId).single(),
+      supabase.from("transactions").select("amount,type,status,transaction_date,deleted_at").eq("business_id", businessId).is("deleted_at", null).lte("transaction_date", today),
+      supabase.from("bills").select("amount,due_date,status").eq("business_id", businessId).eq("status", "Unpaid"),
+    ]);
+    if (businessResult.error || transactionsResult.error || billsResult.error) {
+      setModalError("Something went wrong. Try again.");
+      setReviewWarningLoading(false);
+      return;
+    }
+    const cash = cashOnHand(Number(businessResult.data.opening_balance), transactionsResult.data ?? [], today);
+    const due = billsDue30(billsResult.data ?? [], today);
+    setReviewDebtWarning(debtGuardWarning(safeToSpend(cash, due), Number(transaction.amount)) ?? "");
+    setReviewWarningLoading(false);
+  };
+
+  const reviewTransaction = async (approve: boolean, reason: string) => {
+    if (!isOwner || !businessId || !reviewing || reviewing.status !== "Pending") return;
+    if (!approve) {
+      const reasonError = validateRejectionReason(reason);
+      if (reasonError) { setModalError(reasonError ?? "Enter a reason of 3 to 200 characters."); return; }
+    }
+    setSaving(true);
+    setModalError("");
+    try {
+      const result = await supabase.from("transactions").update(transactionReviewUpdate(approve, reason))
+        .eq("id", reviewing.id).eq("business_id", businessId).eq("status", "Pending").select("id").maybeSingle();
+      if (result.error) throw result.error;
+      if (!result.data) {
+        setModalError("This transaction is no longer pending. Refresh the ledger.");
+        setRefresh((value) => value + 1);
+        return;
+      }
+      setReviewing(null);
+      setReviewDebtWarning("");
+      setToast(approve ? "Transaction approved" : "Transaction rejected");
+      setRefresh((value) => value + 1);
+    } catch (requestError) {
+      setModalError(requestError instanceof Error ? requestError.message : "Something went wrong. Try again.");
+    } finally { setSaving(false); }
+  };
+
   const hasFilters = filters.search !== "" || filters.type !== "All" || filters.category !== "All" || filters.status !== "All" || filters.period !== "All time";
   const clearFilters = () => setFilters(clearLedgerFilters());
 
@@ -364,7 +464,7 @@ export default function Ledger() {
             <div className="text-small text-moss">{displayDate(row.transaction_date)}{isOwner && <span className="block">By {creatorNames[row.created_by ?? ""] ?? "Former staff member"}</span>}</div>
             <p className={`font-semibold ${row.type === "Income" ? "text-success" : "text-ink"}`}>{row.type === "Income" ? "↗" : "↘"} {row.type} {row.type === "Income" ? "+" : "−"}{formatZar(Number(row.amount))}</p>
             <span className={`w-fit rounded-full px-3 py-1 text-small font-semibold ${row.status === "Approved" ? "bg-success/10 text-success" : row.status === "Pending" ? "bg-gold text-ink" : "bg-danger text-white"}`}>{row.status}</span>
-            {isOwner && <div className="flex gap-2 md:justify-end"><button onClick={() => { setModalError(""); setEditing(draftFrom(row)); }} className="h-11 rounded-control border border-moss/30 bg-cream px-4 text-small font-semibold">Edit</button><button onClick={() => { setModalError(""); setDeleting(row); }} className="h-11 rounded-control border border-danger/40 px-4 text-small font-semibold text-danger">Delete</button></div>}
+            {isOwner && <div className="flex flex-wrap gap-2 md:justify-end">{row.status === "Pending" && <button onClick={() => void openReview(row)} className="h-11 rounded-control bg-vault px-4 text-small font-semibold text-white">Review</button>}<button onClick={() => { setModalError(""); setEditing(draftFrom(row)); }} className="h-11 rounded-control border border-moss/30 bg-cream px-4 text-small font-semibold">Edit</button><button onClick={() => { setModalError(""); setDeleting(row); }} className="h-11 rounded-control border border-danger/40 px-4 text-small font-semibold text-danger">Delete</button></div>}
           </article>)}
         </div>
         {rows.length < totalCount && <div className="mt-5 text-center"><button disabled={moreLoading} onClick={() => void load(true, rows.length)} className="h-12 rounded-control border-2 border-vault bg-white px-6 font-semibold text-vault disabled:opacity-60">{moreLoading ? "Loading…" : "Load more"}</button></div>}
@@ -376,6 +476,7 @@ export default function Ledger() {
     </nav>
 
     {editing && <TransactionModal initial={editing} busy={saving} online={online} serverError={modalError} debtWarning={debtWarning} onClearDebtWarning={() => setDebtWarning("")} onClose={() => { if (!saving) { setEditing(null); setDebtWarning(""); } }} onSave={saveTransaction} />}
+    {reviewing && isOwner && <ReviewModal transaction={reviewing} creator={creatorNames[reviewing.created_by ?? ""] ?? "Former staff member"} busy={saving} online={online} serverError={modalError} debtWarning={reviewDebtWarning} warningLoading={reviewWarningLoading} onClose={() => { if (!saving) { setReviewing(null); setReviewDebtWarning(""); setReviewWarningLoading(false); setModalError(""); } }} onReview={reviewTransaction} />}
     {deleting && <DeleteModal transaction={deleting} busy={saving} online={online} serverError={modalError} onClose={() => { if (!saving) setDeleting(null); }} onDelete={deleteTransaction} />}
   </div>;
 }

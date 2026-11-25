@@ -81,6 +81,17 @@ export function validateDeleteReason(reason: string): string | null {
   return reason.trim().length < 3 || reason.length > 200 ? "Enter a reason of 3 to 200 characters." : null;
 }
 
+export function validateRejectionReason(reason: string): string | null {
+  const trimmed = reason.trim();
+  return trimmed.length < 3 || trimmed.length > 200 ? "Enter a reason of 3 to 200 characters." : null;
+}
+
+export function transactionReviewUpdate(approve: boolean, reason = "") {
+  return approve
+    ? { status: "Approved" as const, rejection_reason: null }
+    : { status: "Rejected" as const, rejection_reason: reason.trim() };
+}
+
 export function expectedApprovalStatus(type: TransactionType, amount: number, role: "Owner" | "Staff"): TransactionStatus {
   return role === "Owner" || type === "Income" || amount < 2000 ? "Approved" : "Pending";
 }
